@@ -31,6 +31,6 @@ jobs:
           script: |
             echo "Starting deployment..."
             # Navigate to the deployment directory
-            cd "C:\Program Files\Common Files\microsoft shared\Web Server Extensions\16\TEMPLATE\LAYOUTS\PCW\General\Not Used"
+            cd "C:\Program Files\Common Files\microsoft shared\Web Server Extensions\16\TEMPLATE\LAYOUTS\PCW\CICD"
             # Execute your deployment script or commands
             .\deploy.ps1
