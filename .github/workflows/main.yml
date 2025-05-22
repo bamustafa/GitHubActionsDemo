@@ -21,7 +21,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Deploy to db-sp via SSH
+      - name: Validate required secrets
+        run: |
+          for var in SSH_HOST SSH_USER SSH_PASSWORD; do
+            if [ -z "${{ secrets.SSH_HOST }}" ]; then
+              echo "❌ Missing secrets.SSH_HOST
+              exit 1
+            fi
+          done
+          echo "✅ All required secrets are set."
+      - name: Deploy to server via SSH
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -29,8 +38,14 @@ jobs:
           password: ${{ secrets.SSH_PASSWORD }}
           port: 22
           script: |
-            echo "Starting deployment..."
-            # Navigate to the deployment directory
-            cd "C:\Program Files\Common Files\microsoft shared\Web Server Extensions\16\TEMPLATE\LAYOUTS\PCW\CICD"
-            # Execute your deployment script or commands
-            .\deploy.ps1
+            echo "Mapping UNC path..."
+
+            net use Z: "\\db-sp\LAYOUTS\PCW\CICD" /user:${{ secrets.SSH_USER }} ${{ secrets.SSH_PASSWORD }}
+
+            echo "Copying files to UNC share..."
+
+            xcopy /E /Y "C:\Temp\build\*" "Z:\"
+
+            echo "Deployment complete."
+
+            net use Z: /delete
