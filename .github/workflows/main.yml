@@ -50,7 +50,7 @@ jobs:
           script: |
             echo "Mapping UNC path..."
 
-            net use Z: "\\${{ secrets.SSH_HOST }}\LAYOUTS\PCW\CICD" /user:${{ secrets.SSH_USER }} ${{ secrets.SSH_PASSWORD }}
+            net use Z: "\\db-sp.darbeirut.com\LAYOUTS\PCW\CICD" /user:${{ secrets.SSH_USER }} ${{ secrets.SSH_PASSWORD }}
 
             echo "Copying files to UNC share..."
 
