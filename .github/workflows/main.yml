@@ -1,8 +1,49 @@
-name: hello-world
-'on': push
+name: Deploy to SharePoint On-Prem
+
+on:
+  push:
+    branches:
+      - main
+
 jobs:
-  my-job:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: my-step
-        run: echo "Hello World!"
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Zip deployment package
+        run: |
+          zip -r deploy.zip solution/ scripts/
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sharepoint-package
+          path: deploy.zip
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sharepoint-package
+
+      - name: Install PowerShell
+        uses: PowerShell/PowerShell@v1
+        with:
+          pwsh-version: '7.2'
+
+      - name: Deploy to SharePoint Server (via WinRM)
+        uses: jsdaniell/ssh2winrm-action@v1
+        with:
+          host: ${{ secrets.WINRM_HOST }}
+          username: ${{ secrets.WINRM_USER }}
+          password: ${{ secrets.WINRM_PASSWORD }}
+          command: |
+            Expand-Archive -Path deploy.zip -DestinationPath C:\deploy
+            cd C:\deploy\scripts
+            .\deploy.ps1
