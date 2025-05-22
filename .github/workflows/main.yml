@@ -12,38 +12,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Zip deployment package
-        run: |
-          zip -r deploy.zip solution/ scripts/
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: sharepoint-package
-          path: deploy.zip
-
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    name: Copy layout files to db-sp
 
     steps:
-      - name: Download Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: sharepoint-package
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Install PowerShell
-        uses: PowerShell/PowerShell@v1
+      - name: Deploy to db-sp via SSH
+        uses: appleboy/ssh-action@v0.1.10
         with:
-          pwsh-version: '7.2'
-
-      - name: Deploy to SharePoint Server (via WinRM)
-        uses: jsdaniell/ssh2winrm-action@v1
-        with:
-          host: ${{ secrets.WINRM_HOST }}
-          username: ${{ secrets.WINRM_USER }}
-          password: ${{ secrets.WINRM_PASSWORD }}
-          command: |
-            Expand-Archive -Path deploy.zip -DestinationPath C:\deploy
-            cd C:\deploy\scripts
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          port: 22
+          script: |
+            echo "Starting deployment..."
+            # Navigate to the deployment directory
+            cd "C:\Program Files\Common Files\microsoft shared\Web Server Extensions\16\TEMPLATE\LAYOUTS\PCW\General\Not Used"
+            # Execute your deployment script or commands
             .\deploy.ps1
