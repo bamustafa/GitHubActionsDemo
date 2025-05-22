@@ -23,13 +23,23 @@ jobs:
 
       - name: Validate required secrets
         run: |
-          for var in SSH_HOST SSH_USER SSH_PASSWORD; do
-            if [ -z "${{ secrets.SSH_HOST }}" ]; then
-              echo "❌ Missing secrets.SSH_HOST
-              exit 1
-            fi
-          done
+          if [ -z "${{ secrets.SSH_HOST }}" ]; then
+            echo "❌ Missing secret: SSH_HOST"
+            exit 1
+          fi
+
+          if [ -z "${{ secrets.SSH_USER }}" ]; then
+            echo "❌ Missing secret: SSH_USER"
+            exit 1
+          fi
+
+          if [ -z "${{ secrets.SSH_PASSWORD }}" ]; then
+            echo "❌ Missing secret: SSH_PASSWORD"
+            exit 1
+          fi
+
           echo "✅ All required secrets are set."
+
       - name: Deploy to server via SSH
         uses: appleboy/ssh-action@v0.1.10
         with:
