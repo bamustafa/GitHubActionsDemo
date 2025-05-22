@@ -47,14 +47,13 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           password: ${{ secrets.SSH_PASSWORD }}
           script: |
-            echo "Mapping UNC path..."
+            host: ${{ secrets.SSH_HOST }}
+            username: ${{ secrets.SSH_USER }}
+            password: ${{ secrets.SSH_PASSWORD }}
+            port: 22
+            script: |
+              echo "Moving to SharePoint layouts..."
 
-            net use Z: "\\db-sp.darbeirut.com\LAYOUTS\PCW\CICD" /user:${{ secrets.SSH_USER }} ${{ secrets.SSH_PASSWORD }}
-
-            echo "Copying files to UNC share..."
-
-            xcopy /E /Y "C:\Temp\build\*" "Z:\"
+              xcopy /E /Y "C:\Temp\CICD\*" "C:\Program Files\Common Files\microsoft shared\Web Server Extensions\16\TEMPLATE\LAYOUTS\PCW\CICD\"
 
             echo "Deployment complete."
-
-            net use Z: /delete
