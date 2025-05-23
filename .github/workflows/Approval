@@ -1,0 +1,269 @@
+name: PR Review Flow
+
+on:
+  pull_request:
+    types: [opened, reopened, edited, synchronize]
+  pull_request_review:
+    types: [submitted]
+
+env:
+  PM_USERNAME: zain2022skipq02
+  SENIOR_USERNAME: purebanter
+  JUNIOR_USERNAMES: hanatarek96,oalqatawnh,zainshahbaz786
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  handle-pr-events:
+    name: 🚦 Handle Pull Request Events
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: 🧠 Process PR Creation/Update
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const author = context.payload.pull_request.user.login;
+            const senior = process.env.SENIOR_USERNAME;
+            const juniors = process.env.JUNIOR_USERNAMES.split(',');
+            const pm = process.env.PM_USERNAME;
+
+            let role = "Contributor";
+            if (author === pm) role = "Project Manager";
+            else if (author === senior) role = "Senior Developer";
+            else if (juniors.includes(author)) role = "Junior Developer";
+
+            const prNumber = context.payload.pull_request.number;
+            const branch = context.payload.pull_request.head.ref;
+            const time = new Date().toISOString();
+            const action = context.payload.action;
+
+            const { data: currentPR } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+
+            if (currentPR.assignees.length > 0) {
+              const currentAssignees = currentPR.assignees.map(a => a.login);
+              await github.rest.issues.removeAssignees({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                assignees: currentAssignees,
+              });
+            }
+
+            if (action === 'synchronize') {
+              const { data: reviews } = await github.rest.pulls.listReviews({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+              });
+
+              const lastChangeRequest = reviews
+                .filter(r => r.state === 'CHANGES_REQUESTED')
+                .sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at))[0];
+
+              if (lastChangeRequest) {
+                const lastReviewer = lastChangeRequest.user.login;
+
+                if (role === "Junior Developer") {
+                  if (lastReviewer === senior || lastReviewer === pm) {
+                    await github.rest.issues.addAssignees({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      issue_number: prNumber,
+                      assignees: [pm],
+                    });
+
+                    const message = lastReviewer === senior
+                      ? `🔄 **Junior Developer Updated PR After Senior Review**\n@${author} has addressed changes requested by @${lastReviewer}.\nEscalated to @${pm} for final review.`
+                      : `🔄 **Junior Developer Updated PR After PM Review**\n@${author} has addressed changes requested by @${pm}.\nReassigned to @${pm} for re-review.`;
+
+                    await github.rest.issues.createComment({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      issue_number: prNumber,
+                      body: message,
+                    });
+
+                    return;
+                  }
+                } else if (role === "Senior Developer" && lastReviewer === pm) {
+                  await github.rest.issues.addAssignees({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: prNumber,
+                    assignees: [pm],
+                  });
+
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: prNumber,
+                    body: `🔄 **Senior Developer Updated PR After PM Review**\n@${author} has addressed changes requested by @${pm}.\nReassigned to @${pm} for re-review.`,
+                  });
+
+                  return;
+                } else if (role === "Project Manager") {
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: prNumber,
+                    body: `🔄 **Project Manager Updated PR**\n@${author} has made updates to the PR.\nReady for self-review or team review.`,
+                  });
+
+                  return;
+                }
+              }
+            }
+
+            if (action === 'opened' || action === 'reopened') {
+              let assignTo = '';
+              let message = '';
+
+              if (role === "Junior Developer") {
+                assignTo = senior;
+                message = `🔄 **New PR by Junior Developer**\nAssigned to @${senior} for review.`;
+              } else if (role === "Senior Developer") {
+                assignTo = pm;
+                message = `🔄 **New PR by Senior Developer**\nAssigned to @${pm} for review.`;
+              } else if (role === "Project Manager") {
+                message = `🔄 **New PR by Project Manager**\nReady for self-review or team review.`;
+              }
+
+              if (assignTo) {
+                await github.rest.issues.addAssignees({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: prNumber,
+                  assignees: [assignTo],
+                });
+              }
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: message,
+              });
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: `📝 **PR Metadata**\n- Author: @${author} (${role})\n- Branch: \`${branch}\`\n- Created at: ${time}`,
+              });
+            }
+
+            if (action === 'edited') {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: `📝 **PR Updated by** @${author}\nPR details have been modified. Current assignees remain unchanged.`,
+              });
+            }
+
+  handle-reviews:
+    name: ✅ Handle PR Review Submissions
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request_review'
+
+    steps:
+      - name: 🔍 Process Review Event
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const review = context.payload.review;
+            const reviewer = review.user.login;
+            const reviewState = review.state;
+            const prNumber = context.payload.pull_request.number;
+            const author = context.payload.pull_request.user.login;
+
+            const pm = process.env.PM_USERNAME;
+            const senior = process.env.SENIOR_USERNAME;
+            const juniors = process.env.JUNIOR_USERNAMES.split(',');
+
+            const { data: currentPR } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+
+            if (currentPR.assignees.length > 0) {
+              const currentAssignees = currentPR.assignees.map(a => a.login);
+              await github.rest.issues.removeAssignees({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                assignees: currentAssignees,
+              });
+            }
+
+            let authorRole = "Contributor";
+            if (author === pm) authorRole = "Project Manager";
+            else if (author === senior) authorRole = "Senior Developer";
+            else if (juniors.includes(author)) authorRole = "Junior Developer";
+
+            if (reviewState === "approved") {
+              if (reviewer === senior) {
+                await github.rest.issues.addAssignees({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: prNumber,
+                  assignees: [pm],
+                });
+
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: prNumber,
+                  body: `✅ **Approved by Senior Developer** @${senior}\nEscalated to @${pm} for final review and approval.`,
+                });
+
+              } else if (reviewer === pm) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: prNumber,
+                  body: `🎉 **Final Approval by Project Manager** @${pm}\n✅ This PR is ready to merge!`,
+                });
+              }
+
+            } else if (reviewState === "changes_requested") {
+              await github.rest.issues.addAssignees({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                assignees: [author],
+              });
+
+              let nextSteps = "";
+              if (reviewer === senior && authorRole === "Junior Developer") {
+                nextSteps = "After addressing the changes, this will be escalated to the PM for final review.";
+              } else if (reviewer === pm) {
+                nextSteps = "After addressing the changes, this will need to go through the review process again.";
+              }
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: `⚠️ **Changes Requested by** @${reviewer}\nAssigned back to @${author} for rework.\n${nextSteps}`,
+              });
+
+            } else if (reviewState === "commented") {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: `💬 **Review Comment Added by** @${reviewer}`,
+              });
+            }
